@@ -10,8 +10,9 @@ import re
 import requests
 from datetime import datetime
 from pathlib import Path
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urljoin
 from bs4 import BeautifulSoup
+import pypdf  # For reading PDF content
 
 
 def get_current_month():
@@ -29,8 +30,29 @@ def convert_google_drive_link(link):
     return link
 
 
+def is_pdf_for_current_month(pdf_path: Path, month: str) -> bool:
+    """
+    Check if the PDF content contains the specified month.
+    """
+    try:
+        with open(pdf_path, "rb") as f:
+            reader = pypdf.PdfReader(f)
+            # Check the first page for the month name
+            first_page_text = reader.pages[0].extract_text()
+            if month in first_page_text.lower():
+                print(f"PDF '{pdf_path.name}' is for {month}.")
+                return True
+    except Exception as e:
+        print(f"Could not read PDF {pdf_path.name}: {e}")
+
+    print(f"PDF '{pdf_path.name}' is not for {month}.")
+    return False
+
+
 def download_menu():
-    """Download the current month's lunch menu."""
+    """
+    Download all potential lunch menus and keep the one for the current month.
+    """
     url = "https://www.sfusd.edu/services/health-wellness/nutrition-school-meals/menus"
 
     print(f"Fetching menus from: {url}")
@@ -43,93 +65,76 @@ def download_menu():
         return False
 
     soup = BeautifulSoup(response.content, 'html.parser')
-
-    # Find the current month's lunch menu section
     current_month = get_current_month()
     print(f"Looking for {current_month} lunch menu...")
 
-    # Look for the lunch menu section with the current month
-    menu_section = None
-    for section in soup.find_all(['h3', 'h4']):
-        if section.text and current_month in section.text.lower() and 'lunch' in section.text.lower():
-            menu_section = section
-            print(f"Found menu section: {section.text.strip()}")
-            break
-
-    if not menu_section:
-        print(f"Could not find {current_month} lunch menu section")
-        # Debug: show all h3 and h4 elements
-        print("Available sections:")
-        for section in soup.find_all(['h3', 'h4']):
-            if section.text:
-                print(f"  - {section.text.strip()}")
-        return False
-
-    # Find the Revolution Foods Hot & Cold Lunch Menu link
-    menu_link = None
-
-    # First try to find the link within the section or nearby
-    # Look for links that contain the right text
+    # Find all potential menu links
+    potential_links = []
     for link in soup.find_all('a', href=True):
         link_text = link.text.lower()
-        if ('revolution foods' in link_text and
-            'hot & cold' in link_text and
-            'lunch' in link_text):
-            menu_link = link.get('href')
-            print(f"Found menu link: {link_text}")
-            break
+        if 'revolution foods hot & cold lunch menu' in link_text:
+            href = link.get('href')
+            # Convert to absolute URL if needed
+            if href.startswith('/'):
+                href = urljoin(url, href)
+            potential_links.append(href)
 
-    # If not found, try a broader search
-    if not menu_link:
-        print("Trying broader search for Revolution Foods lunch menu...")
-        for link in soup.find_all('a', href=True):
-            link_text = link.text.lower()
-            if ('revolution foods' in link_text and 'lunch' in link_text):
-                menu_link = link.get('href')
-                print(f"Found alternative menu link: {link_text}")
+    if not potential_links:
+        print("Could not find any 'Revolution Foods' lunch menu links.")
+        return False
+
+    # Deduplicate links
+    unique_links = sorted(list(set(potential_links)))
+    print(f"Found {len(unique_links)} unique potential menu links.")
+
+    # Create data and temp directories
+    data_dir = Path("data")
+    temp_dir = data_dir / "temp"
+    temp_dir.mkdir(exist_ok=True)
+
+    found_menu = False
+    temp_files = []
+
+    for i, link in enumerate(unique_links):
+        download_url = convert_google_drive_link(link)
+        temp_file = temp_dir / f"menu_{i}.pdf"
+        temp_files.append(temp_file)
+
+        print(f"\nDownloading link {i+1}/{len(unique_links)}: {download_url}")
+        try:
+            response = requests.get(download_url, stream=True)
+            response.raise_for_status()
+            with open(temp_file, 'wb') as f:
+                for chunk in response.iter_content(chunk_size=8192):
+                    f.write(chunk)
+
+            # Check if this PDF is the one we want
+            if is_pdf_for_current_month(temp_file, current_month):
+                # This is the correct menu, save it and stop
+                output_file = data_dir / f"{current_month}.pdf"
+                temp_file.rename(output_file)
+                print(f"Successfully identified and saved {output_file}")
+                found_menu = True
                 break
 
-    if not menu_link:
-        print("Could not find Revolution Foods Hot & Cold Lunch Menu link")
-        # Debug: show all links
-        print("Available links:")
-        for link in soup.find_all('a', href=True):
-            if link.text and ('revolution' in link.text.lower() or 'lunch' in link.text.lower()):
-                print(f"  - {link.text.strip()} -> {link.get('href')}")
+        except requests.RequestException as e:
+            print(f"  -> Error downloading file: {e}")
+            continue
+
+    # Cleanup temporary files
+    for f in temp_files:
+        if f.exists():
+            f.unlink()
+    if temp_dir.exists() and not any(temp_dir.iterdir()):
+        temp_dir.rmdir()
+
+    if not found_menu:
+        print(f"\nCould not find the menu for {current_month} after checking all links.")
         return False
 
-    # Convert to absolute URL if needed
-    if menu_link.startswith('/'):
-        menu_link = urljoin(url, menu_link)
-
-    print(f"Found menu link: {menu_link}")
-
-    # Convert Google Drive link to direct download
-    download_url = convert_google_drive_link(menu_link)
-    print(f"Download URL: {download_url}")
-
-    # Create data directory if it doesn't exist
-    data_dir = Path("data")
-    data_dir.mkdir(exist_ok=True)
-
-    # Download the file
-    output_file = data_dir / f"{current_month}.pdf"
-    print(f"Downloading to: {output_file}")
-
-    try:
-        response = requests.get(download_url, stream=True)
-        response.raise_for_status()
-
-        with open(output_file, 'wb') as f:
-            for chunk in response.iter_content(chunk_size=8192):
-                f.write(chunk)
-
-        print(f"Successfully downloaded {output_file}")
-        return True
-
-    except requests.RequestException as e:
-        print(f"Error downloading file: {e}")
-        return False
+    # On success, print the path to the final file for the orchestrator
+    print(data_dir / f"{current_month}.pdf")
+    return True
 
 
 if __name__ == "__main__":
