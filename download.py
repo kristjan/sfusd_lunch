@@ -20,6 +20,16 @@ def get_current_month():
     return datetime.now().strftime("%B").lower()
 
 
+def get_next_month():
+    """Get the next month name in title case."""
+    now = datetime.now()
+    if now.month == 12:
+        next_month_date = datetime(now.year + 1, 1, 1)
+    else:
+        next_month_date = datetime(now.year, now.month + 1, 1)
+    return next_month_date.strftime("%B").lower()
+
+
 def convert_google_drive_link(link):
     """Convert Google Drive view link to direct download link."""
     # Extract file ID from Google Drive link
@@ -30,7 +40,7 @@ def convert_google_drive_link(link):
     return link
 
 
-def is_pdf_for_current_month(pdf_path: Path, month: str) -> bool:
+def is_pdf_for_month(pdf_path: Path, month: str) -> bool:
     """
     Check if the PDF content contains the specified month.
     """
@@ -45,7 +55,7 @@ def is_pdf_for_current_month(pdf_path: Path, month: str) -> bool:
     except Exception as e:
         print(f"Could not read PDF {pdf_path.name}: {e}")
 
-    print(f"PDF '{pdf_path.name}' is not for {month}.")
+    # print(f"PDF '{pdf_path.name}' is not for {month}.") # Reduce noise
     return False
 
 
@@ -66,7 +76,9 @@ def download_menu():
 
     soup = BeautifulSoup(response.content, 'html.parser')
     current_month = get_current_month()
-    print(f"Looking for {current_month} lunch menu...")
+    next_month = get_next_month()
+    months_to_find = {current_month, next_month}
+    print(f"Looking for menus for: {', '.join(months_to_find)}")
 
     # Find all potential menu links
     potential_links = []
@@ -92,7 +104,7 @@ def download_menu():
     temp_dir = data_dir / "temp"
     temp_dir.mkdir(exist_ok=True)
 
-    found_menu = False
+    found_menus = []
     temp_files = []
 
     for i, link in enumerate(unique_links):
@@ -108,13 +120,19 @@ def download_menu():
                 for chunk in response.iter_content(chunk_size=8192):
                     f.write(chunk)
 
-            # Check if this PDF is the one we want
-            if is_pdf_for_current_month(temp_file, current_month):
-                # This is the correct menu, save it and stop
-                output_file = data_dir / f"{current_month}.pdf"
-                temp_file.rename(output_file)
-                print(f"Successfully identified and saved {output_file}")
-                found_menu = True
+            # Check if this PDF is for any of the months we want
+            for month in list(months_to_find):
+                if is_pdf_for_month(temp_file, month):
+                    # This is the correct menu, save it
+                    output_file = data_dir / f"{month}.pdf"
+                    temp_file.rename(output_file)
+                    print(f"Successfully identified and saved {output_file}")
+                    found_menus.append(output_file)
+                    months_to_find.remove(month) # Don't need to find this month again
+                    break
+
+            if not months_to_find:
+                print("Found all requested menus.")
                 break
 
         except requests.RequestException as e:
@@ -128,12 +146,13 @@ def download_menu():
     if temp_dir.exists() and not any(temp_dir.iterdir()):
         temp_dir.rmdir()
 
-    if not found_menu:
-        print(f"\nCould not find the menu for {current_month} after checking all links.")
+    if not found_menus:
+        print(f"\nCould not find any menus for {current_month} or {next_month}.")
         return False
 
-    # On success, print the path to the final file for the orchestrator
-    print(data_dir / f"{current_month}.pdf")
+    # On success, print the paths to the final files for the orchestrator
+    for menu_path in found_menus:
+        print(menu_path)
     return True
 
 

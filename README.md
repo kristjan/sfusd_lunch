@@ -4,7 +4,7 @@ This project automates the process of fetching the SFUSD monthly lunch menu, par
 
 ## Features
 
-- **Smart Downloading**: Automatically finds and downloads the correct PDF menu for the current month, even when multiple months are listed on the SFUSD website.
+- **Smart Downloading**: Automatically finds and downloads the correct PDF menu for the current and next month, even when multiple months are listed on the SFUSD website.
 - **AI-Powered Parsing**: Uses AI to parse the contents of the PDF, extracting dates and food items into a structured JSON format. Supports both Google Gemini (default) and OpenAI GPT-4o.
 - **Home Assistant Integration**: Adds the parsed lunch menu as daily events to a specified Home Assistant calendar (`calendar.lunch`).
 - **Idempotent**: The pipeline is designed to be run repeatedly. It intelligently skips expensive parsing and Home Assistant updates if the menu for the month has already been processed.
@@ -13,18 +13,21 @@ This project automates the process of fetching the SFUSD monthly lunch menu, par
 ## Setup
 
 1.  **Create a virtual environment:**
+
     ```bash
     python3 -m venv venv
     source venv/bin/activate
     ```
 
 2.  **Install dependencies:**
+
     ```bash
     pip install -r requirements.txt
     ```
 
 3.  **Create an environment file:**
     Create a file named `.env` in the root of the project and add your configuration details.
+
     ```
     # .env
     # -- AI Provider (only one is needed) --
@@ -45,6 +48,7 @@ To run the entire pipeline, simply execute the orchestration script:
 ```
 
 The script will perform the following steps:
+
 1.  Download the latest PDF for the current month to `data/`.
 2.  Check if a `data/<month>.json` file already exists.
 3.  If not, it will call the default AI provider (Gemini) to parse the PDF into a new JSON file.
