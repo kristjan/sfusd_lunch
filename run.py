@@ -70,8 +70,8 @@ def main():
         json_path = pdf_path.with_suffix('.json')
         newly_parsed = False
 
-        if json_path.exists():
-            print(f"[Step 2/3] Skipping parse: JSON file '{json_path}' already exists.")
+        if json_path.exists() and json_path.stat().st_mtime >= pdf_path.stat().st_mtime:
+            print(f"[Step 2/3] Skipping parse: JSON file '{json_path}' is up-to-date.")
         else:
             print("[Step 2/3] Running parse script...")
             try:
