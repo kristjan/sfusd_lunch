@@ -47,11 +47,12 @@ def is_pdf_for_month(pdf_path: Path, month: str) -> bool:
     try:
         with open(pdf_path, "rb") as f:
             reader = pypdf.PdfReader(f)
-            # Check the first page for the month name
-            first_page_text = reader.pages[0].extract_text()
-            if month in first_page_text.lower():
-                print(f"PDF '{pdf_path.name}' is for {month}.")
-                return True
+            # Check all pages for the month name
+            for page in reader.pages:
+                page_text = page.extract_text()
+                if month in page_text.lower():
+                    print(f"PDF '{pdf_path.name}' is for {month}.")
+                    return True
     except Exception as e:
         print(f"Could not read PDF {pdf_path.name}: {e}")
 
@@ -80,23 +81,39 @@ def download_menu():
     months_to_find = {current_month, next_month}
     print(f"Looking for menus for: {', '.join(months_to_find)}")
 
-    # Find all potential menu links
-    potential_links = []
+    # Find all potential menu links (supporting new formats: LunchMaster, Refresh, MCC, etc.)
+    ranked_links = []
+    excluded_keywords = ['supper', 'allergen', 'ingredient', '2015', '2016', '2017', '2018', '2019', '2020']
     for link in soup.find_all('a', href=True):
-        link_text = link.text.lower()
-        if 'revolution foods hot & cold lunch menu' in link_text:
-            href = link.get('href')
-            # Convert to absolute URL if needed
-            if href.startswith('/'):
-                href = urljoin(url, href)
-            potential_links.append(href)
+        link_text = link.text.lower().strip()
+        href = link.get('href')
+        if ('lunch' in link_text or 'menu' in link_text) and not any(skip in link_text for skip in excluded_keywords):
+            if 'drive.google.com/file' in href or href.endswith('.pdf'):
+                if href.startswith('/'):
+                    href = urljoin(url, href)
 
-    if not potential_links:
-        print("Could not find any 'Revolution Foods' lunch menu links.")
+                # Prioritize standard hot/cold lunch menus
+                if 'hot/cold' in link_text and 'classroom' not in link_text:
+                    rank = 1
+                elif 'breakfast & lunch' in link_text or 'lunch' in link_text:
+                    rank = 2
+                else:
+                    rank = 3
+                ranked_links.append((rank, href))
+
+    if not ranked_links:
+        print("Could not find any lunch menu links.")
         return False
 
-    # Deduplicate links
-    unique_links = sorted(list(set(potential_links)))
+    # Sort by rank and deduplicate preserving order
+    ranked_links.sort(key=lambda x: x[0])
+    seen = set()
+    unique_links = []
+    for _, href in ranked_links:
+        if href not in seen:
+            seen.add(href)
+            unique_links.append(href)
+
     print(f"Found {len(unique_links)} unique potential menu links.")
 
     # Create data and temp directories

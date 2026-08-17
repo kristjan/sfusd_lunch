@@ -19,13 +19,14 @@ def get_prompt() -> str:
     """Return the prompt for the AI."""
     current_year = datetime.now().year
     return f"""
-    Parse this SFUSD lunch menu PDF and extract the menu data.
+    Parse this SFUSD lunch menu PDF and extract ONLY the LUNCH menu data.
 
     Return a JSON array where each item has:
-    - "date": in ISO format "yyyy-mm-dd" (e.g., "2025-08-19")
-    - "food": array of food items found for that date
+    - "date": in ISO format "yyyy-mm-dd" (e.g., "2026-08-19")
+    - "food": array of food items found for that date for lunch
 
-    Extract all dates and their corresponding food items. Split food items by natural boundaries (newlines, meal separators, etc.).
+    Extract all dates and their corresponding LUNCH food items. Ignore breakfast, snack, or supper items if present in the document.
+    Split food items by natural boundaries (newlines, meal separators, etc.).
 
     The current year is {current_year}.
     """
