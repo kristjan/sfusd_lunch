@@ -37,7 +37,7 @@ def create_calendar_event(date_str: str, food_items: List[str]) -> Dict:
     end_datetime = date_obj.replace(hour=12, minute=00)
 
     return {
-        "entity_id": "calendar.lunch",
+        "entity_id": "calendar.grattan_lunch",
         "summary": "Lunch",
         "description": description,
         "start_date_time": start_datetime.strftime("%Y-%m-%d %H:%M:%S"),
@@ -58,7 +58,7 @@ def add_to_homeassistant(menu_data: List[Dict[str, str]]) -> None:
         raise ValueError("HOMEASSISTANT_URL and HOMEASSISTANT_TOKEN must be set in .env")
 
     print(f"Adding {len(menu_data)} lunch menu events to Home Assistant (if not present)...")
-    print(f"Calendar: calendar.lunch")
+    print(f"Calendar: calendar.grattan_lunch")
     print(f"URL: {ha_url}")
     print()
 
@@ -69,7 +69,7 @@ def add_to_homeassistant(menu_data: List[Dict[str, str]]) -> None:
     }
 
     create_service_url = f"{ha_url}/api/services/calendar/create_event"
-    calendar_url = f"{ha_url}/api/calendars/calendar.lunch"
+    calendar_url = f"{ha_url}/api/calendars/calendar.grattan_lunch"
 
     success_count = 0
     error_count = 0
@@ -78,6 +78,8 @@ def add_to_homeassistant(menu_data: List[Dict[str, str]]) -> None:
     for menu_item in menu_data:
         date_str = menu_item["date"]
         food_items = menu_item["food"]
+        if not food_items:
+            continue
         date_obj = datetime.fromisoformat(date_str)
 
         try:

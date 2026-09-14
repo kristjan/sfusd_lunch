@@ -6,7 +6,7 @@ This project automates the process of fetching the SFUSD monthly lunch menu, par
 
 - **Smart Downloading**: Automatically finds and downloads the correct PDF menu for the current and next month, even when multiple months are listed on the SFUSD website.
 - **AI-Powered Parsing**: Uses AI to parse the contents of the PDF, extracting dates and food items into a structured JSON format. Supports both Google Gemini (default) and OpenAI GPT-4o.
-- **Home Assistant Integration**: Adds the parsed lunch menu as daily events to a specified Home Assistant calendar (`calendar.lunch`).
+- **Home Assistant Integration**: Adds the parsed lunch menu as daily events to a specified Home Assistant calendar (`calendar.grattan_lunch`).
 - **Idempotent**: The pipeline is designed to be run repeatedly. It intelligently skips expensive parsing and Home Assistant updates if the menu for the month has already been processed.
 - **Fully Orchestrated**: A single script (`run.py`) manages the entire download, parse, and update workflow.
 
@@ -75,7 +75,7 @@ By default, the script uses Google Gemini. If you prefer to use OpenAI (GPT-4o),
 
 - **PDFs**: Downloaded menus are saved in the `data/` directory (e.g., `data/october.pdf`).
 - **JSON**: Structured menu data is saved in the `data/` directory (e.g., `data/october.json`).
-- **Home Assistant**: Events are created in the `calendar.lunch` entity.
+- **Home Assistant**: Events are created in the `calendar.grattan_lunch` entity.
 
 ## Notes
 
