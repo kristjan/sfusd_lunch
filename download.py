@@ -40,17 +40,34 @@ def convert_google_drive_link(link):
     return link
 
 
+MONTH_PATTERNS = {
+    'january': r'\b(january|jan)\b',
+    'february': r'\b(february|feb)\b',
+    'march': r'\b(march|mar)\b',
+    'april': r'\b(april|apr)\b',
+    'may': r'\bmay\b',
+    'june': r'\b(june|jun)\b',
+    'july': r'\b(july|jul)\b',
+    'august': r'\b(august|aug)\b',
+    'september': r'\b(september|sept|sep)\b',
+    'october': r'\b(october|oct)\b',
+    'november': r'\b(november|nov)\b',
+    'december': r'\b(december|dec)\b',
+}
+
+
 def is_pdf_for_month(pdf_path: Path, month: str) -> bool:
     """
-    Check if the PDF content contains the specified month.
+    Check if the PDF content contains the specified month (full name or abbreviation).
     """
+    pattern = MONTH_PATTERNS.get(month.lower(), rf"\b{re.escape(month.lower())}\b")
     try:
         with open(pdf_path, "rb") as f:
             reader = pypdf.PdfReader(f)
-            # Check all pages for the month name
+            # Check all pages for the month name or abbreviation
             for page in reader.pages:
-                page_text = page.extract_text()
-                if month in page_text.lower():
+                page_text = page.extract_text() or ""
+                if re.search(pattern, page_text, re.IGNORECASE):
                     print(f"PDF '{pdf_path.name}' is for {month}.")
                     return True
     except Exception as e:
@@ -81,25 +98,67 @@ def download_menu():
     months_to_find = {current_month, next_month}
     print(f"Looking for menus for: {', '.join(months_to_find)}")
 
-    # Find all potential menu links (supporting new formats: LunchMaster, Refresh, MCC, etc.)
+    # Find menu links, prioritizing Revolution Foods
     ranked_links = []
-    excluded_keywords = ['supper', 'allergen', 'ingredient', '2015', '2016', '2017', '2018', '2019', '2020']
-    for link in soup.find_all('a', href=True):
-        link_text = link.text.lower().strip()
-        href = link.get('href')
-        if ('lunch' in link_text or 'menu' in link_text) and not any(skip in link_text for skip in excluded_keywords):
-            if 'drive.google.com/file' in href or href.endswith('.pdf'):
-                if href.startswith('/'):
-                    href = urljoin(url, href)
+    excluded_keywords = ['supper', 'pre-k', 'allergen', 'ingredient', '2015', '2016', '2017', '2018', '2019', '2020']
 
-                # Prioritize standard hot/cold lunch menus
-                if 'hot/cold' in link_text and 'classroom' not in link_text:
-                    rank = 1
-                elif 'breakfast & lunch' in link_text or 'lunch' in link_text:
-                    rank = 2
-                else:
-                    rank = 3
-                ranked_links.append((rank, href))
+    # 1. Prioritize Revolution Foods section
+    rev_header = soup.find(lambda el: el.name in ['h2', 'h3', 'h4'] and 'revolution foods' in el.text.lower())
+    if rev_header:
+        container = rev_header.find_parent(class_=lambda c: c and 'postcard-carousel' in c) or rev_header.find_parent(class_=lambda c: c and 'postcard' in c) or rev_header.parent
+        for link in container.find_all('a', href=True):
+            href = link.get('href')
+            if not ('drive.google.com/file' in href or href.endswith('.pdf')):
+                continue
+            if href.startswith('/'):
+                href = urljoin(url, href)
+
+            link_text = link.get_text().strip().lower()
+            parent = link.find_parent(['p', 'li', 'div'])
+            context_text = parent.get_text(' ', strip=True).lower() if parent else link_text
+            full_text = f"{link_text} {context_text}"
+
+            if any(skip in full_text for skip in excluded_keywords):
+                continue
+
+            month_match = any(m in link_text for m in months_to_find)
+
+            if 'breakfast & lunch' in full_text or 'hot/cold' in full_text:
+                rank = 1 if month_match else 2
+            elif 'lunch' in full_text:
+                rank = 3 if month_match else 4
+            else:
+                rank = 5 if month_match else 6
+
+            ranked_links.append((rank, href))
+
+    # 2. Fallback if no Revolution Foods links found
+    if not ranked_links:
+        for link in soup.find_all('a', href=True):
+            href = link.get('href')
+            if not ('drive.google.com/file' in href or href.endswith('.pdf')):
+                continue
+            if href.startswith('/'):
+                href = urljoin(url, href)
+
+            link_text = link.get_text().strip().lower()
+            parent = link.find_parent(['p', 'li', 'div'])
+            context_text = parent.get_text(' ', strip=True).lower() if parent else link_text
+            full_text = f"{link_text} {context_text}"
+
+            if any(skip in full_text for skip in excluded_keywords):
+                continue
+
+            month_match = any(m in link_text for m in months_to_find)
+
+            # Prioritize standard hot/cold lunch menus
+            if 'hot/cold' in full_text and 'classroom' not in full_text:
+                rank = 1 if month_match else 2
+            elif 'breakfast & lunch' in full_text or 'lunch' in full_text:
+                rank = 3 if month_match else 4
+            else:
+                rank = 5 if month_match else 6
+            ranked_links.append((rank, href))
 
     if not ranked_links:
         print("Could not find any lunch menu links.")
